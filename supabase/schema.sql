@@ -90,6 +90,8 @@ CREATE TABLE rooms (
   room_type_id UUID REFERENCES room_types(id) ON DELETE SET NULL,
   room_number VARCHAR(20) NOT NULL,
   floor INTEGER DEFAULT 1,
+  capacity INTEGER DEFAULT 2, -- max number of guests allowed
+  rate_per_night DECIMAL(10,2) DEFAULT 0, -- price per night for this room
   status VARCHAR(50) DEFAULT 'available', -- available | maintenance | blocked
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -161,6 +163,20 @@ CREATE TABLE invoices (
   payment_status VARCHAR(50) DEFAULT 'paid', -- paid | pending | partial
   notes TEXT,
   created_by UUID REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================
+-- INVOICE LINE ITEMS (for dynamic line items)
+-- ============================================
+CREATE TABLE invoice_line_items (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+  description VARCHAR(255) NOT NULL,
+  quantity DECIMAL(10,2) DEFAULT 1,
+  rate DECIMAL(10,2) DEFAULT 0,
+  amount DECIMAL(10,2) GENERATED ALWAYS AS (quantity * rate) STORED,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

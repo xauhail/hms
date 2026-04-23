@@ -27,7 +27,7 @@ router.get('/rooms', async (req, res) => {
 
 router.post('/rooms', requireAdmin, async (req, res) => {
   try {
-    const { room_number, room_type_id, floor, status, notes } = req.body;
+    const { room_number, room_type_id, floor, capacity, rate_per_night, status, notes } = req.body;
     if (!room_number) return res.status(400).json({ error: 'Room number is required' });
 
     // Check plan room limit
@@ -48,7 +48,11 @@ router.post('/rooms', requireAdmin, async (req, res) => {
 
     const { data, error } = await supabase
       .from('rooms')
-      .insert({ org_id: req.orgId, room_number, room_type_id, floor: floor || 1, status: status || 'available', notes })
+      .insert({ 
+        org_id: req.orgId, room_number, room_type_id, floor: floor || 1, 
+        capacity: capacity || 2, rate_per_night: rate_per_night || 0,
+        status: status || 'available', notes 
+      })
       .select('*, room_types(name, base_rate)')
       .single();
 
@@ -62,10 +66,10 @@ router.post('/rooms', requireAdmin, async (req, res) => {
 
 router.patch('/rooms/:id', requireAdmin, async (req, res) => {
   try {
-    const { status, notes, room_type_id, floor } = req.body;
+    const { status, notes, room_type_id, floor, capacity, rate_per_night } = req.body;
     const { data, error } = await supabase
       .from('rooms')
-      .update({ status, notes, room_type_id, floor })
+      .update({ status, notes, room_type_id, floor, capacity, rate_per_night })
       .eq('id', req.params.id)
       .eq('org_id', req.orgId)
       .select()
@@ -87,14 +91,20 @@ router.delete('/rooms/:id', requireAdmin, async (req, res) => {
 
 router.get('/rooms/availability', async (req, res) => {
   try {
-    const { checkin, checkout } = req.query;
+    const { checkin, checkout, room_type_id } = req.query;
     if (!checkin || !checkout) return res.status(400).json({ error: 'checkin and checkout dates required' });
 
-    const { data: rooms } = await supabase
+    let roomsQuery = supabase
       .from('rooms')
       .select('*, room_types(name, base_rate)')
       .eq('org_id', req.orgId)
       .eq('status', 'available');
+    
+    if (room_type_id) {
+      roomsQuery = roomsQuery.eq('room_type_id', room_type_id);
+    }
+    
+    const { data: rooms } = await roomsQuery;
 
     const { data: conflictingBookings } = await supabase
       .from('bookings')
@@ -297,46 +307,101 @@ router.get('/bookings/calendar', async (req, res) => {
 // ============================================
 
 router.get('/invoices', async (req, res) => {
-  const { data, error } = await supabase.from('invoices')
-    .select('*, guests(full_name), bookings(checkin_date, checkout_date, rooms(room_number))')
-    .eq('org_id', req.orgId)
-    .order('created_at', { ascending: false });
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ invoices: data });
+  try {
+    const { data, error } = await supabase.from('invoices')
+      .select('*, guests(full_name), bookings(checkin_date, checkout_date, rooms(room_number)), invoice_line_items(*)')
+      .eq('org_id', req.orgId)
+      .order('created_at', { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ invoices: data });
+  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
 });
 
 router.post('/invoices', async (req, res) => {
   try {
-    const { booking_id, guest_id, room_charges, food_charges, service_charges, other_charges, discount, gst_rate, payment_mode, notes } = req.body;
+    const { booking_id, guest_id, line_items, discount, gst_rate, payment_mode, payment_status, notes } = req.body;
 
-    const sub = (room_charges || 0) + (food_charges || 0) + (service_charges || 0) + (other_charges || 0) - (discount || 0);
-    const gst = sub * ((gst_rate || 12) / 100);
-    const total = sub + gst;
+    // Calculate totals from line items
+    const subtotal = (line_items || []).reduce((sum, item) => sum + ((item.quantity || 0) * (item.rate || 0)), 0);
+    const discountAmt = discount || 0;
+    const taxable = subtotal - discountAmt;
+    const gstAmt = taxable * ((gst_rate || 12) / 100);
+    const total = taxable + gstAmt;
 
     // Auto-generate invoice number
     const { data: invNum } = await supabase.rpc('generate_invoice_number', { p_org_id: req.orgId });
 
-    const { data, error } = await supabase.from('invoices')
+    // Create invoice
+    const { data: invoice, error: invError } = await supabase.from('invoices')
       .insert({
         org_id: req.orgId, booking_id, guest_id,
         invoice_number: invNum,
-        room_charges: room_charges || 0, food_charges: food_charges || 0,
-        service_charges: service_charges || 0, other_charges: other_charges || 0,
-        discount: discount || 0, subtotal: sub,
-        gst_rate: gst_rate || 12, gst_amount: gst, total,
-        payment_mode: payment_mode || 'cash', payment_status: 'paid', notes,
+        room_charges: 0, food_charges: 0, service_charges: 0, other_charges: 0,
+        discount: discountAmt, subtotal: taxable,
+        gst_rate: gst_rate || 12, gst_amount: gstAmt, total,
+        payment_mode: payment_mode || 'cash', payment_status: payment_status || 'pending', notes,
         created_by: req.user.id
       })
       .select('*, guests(full_name), bookings(checkin_date, checkout_date)').single();
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (invError) return res.status(500).json({ error: invError.message });
 
-    // Update booking status to checked-out if invoice generated
-    if (booking_id) {
+    // Create line items if provided
+    if (line_items && line_items.length > 0) {
+      const lineItemsData = line_items.map(item => ({
+        org_id: req.orgId,
+        invoice_id: invoice.id,
+        description: item.description,
+        quantity: item.quantity || 1,
+        rate: item.rate || 0
+      }));
+      
+      const { error: lineError } = await supabase.from('invoice_line_items').insert(lineItemsData);
+      if (lineError) console.error('Line items error:', lineError);
+    }
+
+    // Update booking status to checked-out if invoice generated and payment is paid
+    if (booking_id && payment_status === 'paid') {
       await supabase.from('bookings').update({ status: 'checked-out' }).eq('id', booking_id);
     }
 
-    res.status(201).json({ invoice: data });
+    // Fetch invoice with line items
+    const { data: fullInvoice, error: fetchError } = await supabase.from('invoices')
+      .select('*, guests(full_name), bookings(checkin_date, checkout_date, rooms(room_number)), invoice_line_items(*)')
+      .eq('id', invoice.id).single();
+
+    res.status(201).json({ invoice: fullInvoice || invoice });
+  } catch (err) { 
+    console.error('Invoice creation error:', err);
+    res.status(500).json({ error: 'Internal server error' }); 
+  }
+});
+
+// Add line item to existing invoice
+router.post('/invoices/:id/line-items', async (req, res) => {
+  try {
+    const { description, quantity, rate } = req.body;
+    if (!description) return res.status(400).json({ error: 'Description is required' });
+
+    const { data, error } = await supabase.from('invoice_line_items')
+      .insert({ org_id: req.orgId, invoice_id: req.params.id, description, quantity: quantity || 1, rate: rate || 0 })
+      .select().single();
+    
+    if (error) return res.status(500).json({ error: error.message });
+    res.status(201).json({ line_item: data });
+  } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
+});
+
+// Delete line item
+router.delete('/invoices/:invoiceId/line-items/:lineItemId', async (req, res) => {
+  try {
+    const { error } = await supabase.from('invoice_line_items')
+      .delete()
+      .eq('id', req.params.lineItemId)
+      .eq('org_id', req.orgId);
+    
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true });
   } catch (err) { res.status(500).json({ error: 'Internal server error' }); }
 });
 

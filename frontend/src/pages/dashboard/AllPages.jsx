@@ -115,7 +115,10 @@ export function Rooms() {
   const [roomTypes, setRoomTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({room_number:'',room_type_id:'',floor:1});
+  const [showEdit, setShowEdit] = useState(false);
+  const [editRoom, setEditRoom] = useState(null);
+  const [form, setForm] = useState({room_number:'',room_type_id:'',floor:1,capacity:2,rate_per_night:'',notes:''});
+  const [editForm, setEditForm] = useState({room_number:'',room_type_id:'',floor:1,capacity:2,rate_per_night:'',status:'available',notes:''});
 
   useEffect(()=>{fetchRooms();},[]);
   const fetchRooms = async () => {
@@ -128,8 +131,36 @@ export function Rooms() {
 
   const addRoom = async (e) => {
     e.preventDefault();
-    try { await api.post('/hms/rooms',form); toast.success('Room added'); setShowAdd(false); setForm({room_number:'',room_type_id:'',floor:1}); fetchRooms(); }
+    try { await api.post('/hms/rooms',form); toast.success('Room added'); setShowAdd(false); setForm({room_number:'',room_type_id:'',floor:1,capacity:2,rate_per_night:'',notes:''}); fetchRooms(); }
     catch(err){ toast.error(err.response?.data?.error||'Failed to add room'); }
+  };
+
+  const openEdit = (room) => {
+    setEditRoom(room);
+    setEditForm({
+      room_number: room.room_number,
+      room_type_id: room.room_type_id || '',
+      floor: room.floor,
+      capacity: room.capacity || 2,
+      rate_per_night: room.rate_per_night || '',
+      status: room.status,
+      notes: room.notes || ''
+    });
+    setShowEdit(true);
+  };
+
+  const updateRoom = async (e) => {
+    e.preventDefault();
+    if(!editRoom) return;
+    try {
+      await api.patch(`/hms/rooms/${editRoom.id}`, editForm);
+      toast.success('Room updated');
+      setShowEdit(false);
+      setEditRoom(null);
+      fetchRooms();
+    } catch(err) {
+      toast.error(err.response?.data?.error || 'Failed to update room');
+    }
   };
 
   const toggleStatus = async (room) => {
@@ -170,6 +201,12 @@ export function Rooms() {
             <div><label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:4,textTransform:'uppercase'}}>Floor</label>
               <input type="number" value={form.floor} onChange={e=>setForm(p=>({...p,floor:e.target.value}))} min="1" style={{padding:'9px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:13.5,width:80,outline:'none',fontFamily:'inherit'}}/>
             </div>
+            <div><label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:4,textTransform:'uppercase'}}>Capacity</label>
+              <input type="number" value={form.capacity} onChange={e=>setForm(p=>({...p,capacity:e.target.value}))} min="1" max="20" style={{padding:'9px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:13.5,width:80,outline:'none',fontFamily:'inherit'}}/>
+            </div>
+            <div><label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:4,textTransform:'uppercase'}}>Rate/Night (₹)</label>
+              <input type="number" value={form.rate_per_night} onChange={e=>setForm(p=>({...p,rate_per_night:e.target.value}))} min="0" placeholder="2500" style={{padding:'9px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:13.5,width:100,outline:'none',fontFamily:'inherit'}}/>
+            </div>
             <button type="submit" style={{padding:'9px 20px',borderRadius:8,border:'none',background:'var(--accent)',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Add Room</button>
             <button type="button" onClick={()=>setShowAdd(false)} style={{padding:'9px 16px',borderRadius:8,border:'1.5px solid var(--border)',background:'transparent',fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Cancel</button>
           </form>
@@ -189,23 +226,80 @@ export function Rooms() {
             <div style={{width:8,height:8,borderRadius:'50%',background:dotColor[room.status],margin:'0 auto 8px'}}/>
             <div style={{fontFamily:'Syne,sans-serif',fontWeight:800,fontSize:20}}>{room.room_number}</div>
             <div style={{fontSize:11,color:'var(--muted)',margin:'2px 0'}}>{room.room_types?.name||'Standard'}</div>
-            <div style={{fontSize:11,color:'var(--muted)',marginBottom:8}}>Floor {room.floor}</div>
+            <div style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>Floor {room.floor} · {room.capacity} guests</div>
+            <div style={{fontSize:12,color:'var(--accent)',fontWeight:600,marginBottom:8}}>₹{room.rate_per_night||0}/night</div>
             <div style={{display:'flex',gap:4,justifyContent:'center'}}>
               <button onClick={()=>toggleStatus(room)} style={{fontSize:10,padding:'3px 6px',borderRadius:4,border:'1px solid var(--border)',background:'var(--surface)',cursor:'pointer',fontFamily:'inherit'}}>
                 {room.status==='maintenance'?'✓ Fix':'⚠ Maint'}
               </button>
-              <button onClick={()=>deleteRoom(room.id)} style={{fontSize:10,padding:'3px 6px',borderRadius:4,border:'1px solid #fca5a5',background:'var(--red-bg)',color:'var(--red)',cursor:'pointer',fontFamily:'inherit'}}>×</button>
+              <button onClick={()=>openEdit(room)} style={{fontSize:10,padding:'3px 6px',borderRadius:4,border:'1px solid var(--border)',background:'var(--surface)',cursor:'pointer',fontFamily:'inherit'}} title="Edit">✎</button>
+              <button onClick={()=>deleteRoom(room.id)} style={{fontSize:10,padding:'3px 6px',borderRadius:4,border:'1px solid #fca5a5',background:'var(--red-bg)',color:'var(--red)',cursor:'pointer',fontFamily:'inherit'}} title="Delete">×</button>
             </div>
           </div>
         ))}
         {rooms.length===0 && <div style={{gridColumn:'1/-1',textAlign:'center',padding:48,color:'var(--muted)'}}>No rooms added yet. Click "+ Add Room" above.</div>}
       </div>
+
+      {/* Edit Room Modal */}
+      {showEdit && editRoom && (
+        <div onClick={()=>setShowEdit(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.4)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:'var(--surface)',borderRadius:16,padding:28,width:'100%',maxWidth:540,maxHeight:'85vh',overflowY:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+              <h3 style={{fontFamily:'Syne,sans-serif',fontWeight:800,fontSize:18}}>Edit Room {editRoom.room_number}</h3>
+              <button onClick={()=>setShowEdit(false)} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:'var(--muted)'}}>×</button>
+            </div>
+            <form onSubmit={updateRoom}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+                <div>
+                  <label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:5,textTransform:'uppercase'}}>Room Number *</label>
+                  <input value={editForm.room_number} onChange={e=>setEditForm(p=>({...p,room_number:e.target.value}))} required style={{width:'100%',padding:'10px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:14,outline:'none'}}/>
+                </div>
+                <div>
+                  <label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:5,textTransform:'uppercase'}}>Room Type</label>
+                  <select value={editForm.room_type_id} onChange={e=>setEditForm(p=>({...p,room_type_id:e.target.value}))} style={{width:'100%',padding:'10px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:14,outline:'none'}}>
+                    <option value="">Select type</option>
+                    {roomTypes.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:5,textTransform:'uppercase'}}>Floor</label>
+                  <input type="number" value={editForm.floor} onChange={e=>setEditForm(p=>({...p,floor:e.target.value}))} min="1" style={{width:'100%',padding:'10px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:14,outline:'none'}}/>
+                </div>
+                <div>
+                  <label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:5,textTransform:'uppercase'}}>Capacity (guests)</label>
+                  <input type="number" value={editForm.capacity} onChange={e=>setEditForm(p=>({...p,capacity:e.target.value}))} min="1" max="20" style={{width:'100%',padding:'10px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:14,outline:'none'}}/>
+                </div>
+                <div>
+                  <label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:5,textTransform:'uppercase'}}>Rate/Night (₹)</label>
+                  <input type="number" value={editForm.rate_per_night} onChange={e=>setEditForm(p=>({...p,rate_per_night:e.target.value}))} min="0" style={{width:'100%',padding:'10px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:14,outline:'none'}}/>
+                </div>
+                <div>
+                  <label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:5,textTransform:'uppercase'}}>Status</label>
+                  <select value={editForm.status} onChange={e=>setEditForm(p=>({...p,status:e.target.value}))} style={{width:'100%',padding:'10px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:14,outline:'none'}}>
+                    <option value="available">Available</option>
+                    <option value="booked">Booked/Occupied</option>
+                    <option value="maintenance">Maintenance</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{marginBottom:16}}>
+                <label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:5,textTransform:'uppercase'}}>Notes</label>
+                <textarea value={editForm.notes} onChange={e=>setEditForm(p=>({...p,notes:e.target.value}))} placeholder="Room notes..." rows={3} style={{width:'100%',padding:'10px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:14,outline:'none',resize:'vertical',fontFamily:'inherit'}}/>
+              </div>
+              <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+                <button type="button" onClick={()=>setShowEdit(false)} style={{padding:'10px 18px',borderRadius:8,border:'1.5px solid var(--border)',background:'transparent',cursor:'pointer',fontFamily:'inherit'}}>Cancel</button>
+                <button type="submit" style={{padding:'10px 20px',borderRadius:8,border:'none',background:'var(--accent)',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ============================================================
-// Invoices.jsx
+// Invoices.jsx with Line Items
 // ============================================================
 export function Invoices() {
   const [invoices, setInvoices] = useState([]);
@@ -213,7 +307,14 @@ export function Invoices() {
   const [guests, setGuests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({guest_id:'',booking_id:'',room_charges:0,food_charges:0,service_charges:0,other_charges:0,discount:0,payment_mode:'cash',notes:''});
+  const [viewInvoice, setViewInvoice] = useState(null);
+  const [form, setForm] = useState({
+    guest_id:'', booking_id:'', 
+    line_items: [{description:'Room Charges',quantity:1,rate:0}],
+    discount:0, gst_rate:12, 
+    payment_mode:'cash', payment_status:'pending',
+    notes:''
+  });
 
   useEffect(()=>{fetchAll();},[]);
   const fetchAll = async () => {
@@ -224,17 +325,63 @@ export function Invoices() {
     setLoading(false);
   };
 
+  // Line items management
+  const addLineItem = () => {
+    setForm(p=>({...p, line_items: [...p.line_items, {description:'',quantity:1,rate:0}]}));
+  };
+  
+  const removeLineItem = (idx) => {
+    setForm(p=>({...p, line_items: p.line_items.filter((_,i)=>i!==idx)}));
+  };
+  
+  const updateLineItem = (idx, field, value) => {
+    setForm(p=>({
+      ...p, 
+      line_items: p.line_items.map((item,i)=>i===idx?{...item,[field]:value}:item)
+    }));
+  };
+
+  // Calculations
+  const subtotal = form.line_items.reduce((sum,item)=>sum+((parseFloat(item.quantity)||0)*(parseFloat(item.rate)||0)),0);
+  const discount = parseFloat(form.discount)||0;
+  const taxable = subtotal - discount;
+  const gst = Math.round(taxable * (parseFloat(form.gst_rate)||12) / 100);
+  const total = taxable + gst;
+
   const h = (e) => setForm(p=>({...p,[e.target.name]:e.target.value}));
-  const sub = parseFloat(form.room_charges||0)+parseFloat(form.food_charges||0)+parseFloat(form.service_charges||0)+parseFloat(form.other_charges||0)-parseFloat(form.discount||0);
-  const gst = Math.round(sub*0.12);
-  const total = sub+gst;
 
   const createInvoice = async (e) => {
     e.preventDefault();
     if(!form.guest_id){toast.error('Select a guest');return;}
+    if(form.line_items.length===0){toast.error('Add at least one line item');return;}
+    
     try {
-      await api.post('/hms/invoices',{...form,gst_rate:12});
-      toast.success('Invoice created!'); setShowModal(false); fetchAll();
+      const payload = {
+        guest_id: form.guest_id,
+        booking_id: form.booking_id || null,
+        line_items: form.line_items.map(item=>({
+          description: item.description,
+          quantity: parseFloat(item.quantity)||0,
+          rate: parseFloat(item.rate)||0
+        })),
+        discount: discount,
+        gst_rate: parseFloat(form.gst_rate)||12,
+        payment_mode: form.payment_mode,
+        payment_status: form.payment_status,
+        notes: form.notes
+      };
+      
+      await api.post('/hms/invoices', payload);
+      toast.success('Invoice created!'); 
+      setShowModal(false); 
+      setForm({
+        guest_id:'', booking_id:'', 
+        line_items: [{description:'Room Charges',quantity:1,rate:0}],
+        discount:0, gst_rate:12, 
+        payment_mode:'cash', payment_status:'pending',
+        notes:''
+      });
+      fetchAll();
     } catch(err){toast.error(err.response?.data?.error||'Failed');}
   };
 
@@ -247,9 +394,11 @@ export function Invoices() {
     {key:'payment_mode',label:'Mode',render:v=><Badge>{v}</Badge>},
     {key:'payment_status',label:'Status',render:v=><Badge variant={v==='paid'?'success':'warning'}>{v}</Badge>},
     {key:'created_at',label:'Date',render:v=>new Date(v).toLocaleDateString('en-IN')},
+    {key:'actions',label:'',render:(_,r)=><button onClick={()=>setViewInvoice(r)} style={{fontSize:12,padding:'4px 8px',borderRadius:5,border:'1px solid var(--border)',background:'var(--surface2)',cursor:'pointer'}}>View</button>},
   ];
 
   if(loading) return <Spinner />;
+  
   return (
     <div>
       <PageHeader title="Invoices & Billing">
@@ -257,53 +406,147 @@ export function Invoices() {
       </PageHeader>
       <Card><Table columns={cols} data={invoices} emptyText="No invoices yet"/></Card>
 
+      {/* Create Invoice Modal */}
       {showModal && (
         <div onClick={()=>setShowModal(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.4)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:'var(--surface)',borderRadius:16,padding:28,width:'100%',maxWidth:540,maxHeight:'85vh',overflowY:'auto'}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:'var(--surface)',borderRadius:16,padding:28,width:'100%',maxWidth:700,maxHeight:'90vh',overflowY:'auto'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
               <h3 style={{fontFamily:'Syne,sans-serif',fontWeight:800,fontSize:18}}>Generate Invoice</h3>
               <button onClick={()=>setShowModal(false)} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:'var(--muted)'}}>×</button>
             </div>
+            
             <form onSubmit={createInvoice}>
-              <div style={{marginBottom:12}}>
-                <label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:5,textTransform:'uppercase'}}>Guest *</label>
-                <select name="guest_id" value={form.guest_id} onChange={h} required style={{width:'100%',padding:'9px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:13.5,outline:'none',fontFamily:'inherit'}}>
-                  <option value="">Select guest</option>
-                  {guests.map(g=><option key={g.id} value={g.id}>{g.full_name} — {g.phone}</option>)}
-                </select>
+              {/* Guest & Booking */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+                <div>
+                  <label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:5,textTransform:'uppercase'}}>Guest *</label>
+                  <select name="guest_id" value={form.guest_id} onChange={h} required style={{width:'100%',padding:'9px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:13.5,outline:'none',fontFamily:'inherit'}}>
+                    <option value="">Select guest</option>
+                    {guests.map(g=><option key={g.id} value={g.id}>{g.full_name} — {g.phone}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:5,textTransform:'uppercase'}}>Booking (optional)</label>
+                  <select name="booking_id" value={form.booking_id} onChange={h} style={{width:'100%',padding:'9px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:13.5,outline:'none',fontFamily:'inherit'}}>
+                    <option value="">No booking</option>
+                    {bookings.filter(b=>b.guest_id===form.guest_id||!form.guest_id).map(b=><option key={b.id} value={b.id}>Room {b.rooms?.room_number} · {b.checkin_date} to {b.checkout_date}</option>)}
+                  </select>
+                </div>
               </div>
-              <div style={{marginBottom:12}}>
-                <label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:5,textTransform:'uppercase'}}>Booking (optional)</label>
-                <select name="booking_id" value={form.booking_id} onChange={h} style={{width:'100%',padding:'9px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:13.5,outline:'none',fontFamily:'inherit'}}>
-                  <option value="">No booking</option>
-                  {bookings.filter(b=>b.guest_id===form.guest_id||!form.guest_id).map(b=><option key={b.id} value={b.id}>Room {b.rooms?.room_number} · {b.checkin_date} to {b.checkout_date}</option>)}
-                </select>
-              </div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
-                {[['room_charges','Room Charges (₹)'],['food_charges','Food Charges (₹)'],['service_charges','Service Charges (₹)'],['other_charges','Other Charges (₹)'],['discount','Discount (₹)']].map(([n,l])=>(
-                  <div key={n}>
-                    <label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:5,textTransform:'uppercase'}}>{l}</label>
-                    <input name={n} type="number" value={form[n]} onChange={h} min="0" style={{width:'100%',padding:'9px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:13.5,outline:'none',fontFamily:'inherit'}}/>
+
+              {/* Line Items Section */}
+              <div style={{marginBottom:16}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+                  <label style={{fontSize:11,fontWeight:600,color:'var(--muted)',textTransform:'uppercase'}}>Line Items</label>
+                  <button type="button" onClick={addLineItem} style={{fontSize:12,padding:'6px 12px',borderRadius:6,border:'none',background:'var(--accent)',color:'#fff',cursor:'pointer'}}>+ Add Item</button>
+                </div>
+                
+                <div style={{border:'1px solid var(--border)',borderRadius:8,overflow:'hidden'}}>
+                  <div style={{display:'grid',gridTemplateColumns:'2fr 80px 100px 100px 40px',gap:8,padding:'8px 12px',background:'var(--surface2)',fontSize:11,fontWeight:600,color:'var(--muted)',textTransform:'uppercase'}}>
+                    <span>Description</span><span>Qty</span><span>Rate (₹)</span><span>Amount</span><span></span>
                   </div>
-                ))}
+                  {form.line_items.map((item,idx)=>{
+                    const amount = (parseFloat(item.quantity)||0)*(parseFloat(item.rate)||0);
+                    return (
+                      <div key={idx} style={{display:'grid',gridTemplateColumns:'2fr 80px 100px 100px 40px',gap:8,padding:'8px 12px',borderTop:'1px solid var(--border)',alignItems:'center'}}>
+                        <input type="text" value={item.description} onChange={e=>updateLineItem(idx,'description',e.target.value)} placeholder="Item description" style={{padding:'6px 10px',border:'1.5px solid var(--border)',borderRadius:6,fontSize:13,outline:'none'}}/>
+                        <input type="number" value={item.quantity} onChange={e=>updateLineItem(idx,'quantity',e.target.value)} min="0" step="0.01" style={{padding:'6px 10px',border:'1.5px solid var(--border)',borderRadius:6,fontSize:13,outline:'none'}}/>
+                        <input type="number" value={item.rate} onChange={e=>updateLineItem(idx,'rate',e.target.value)} min="0" style={{padding:'6px 10px',border:'1.5px solid var(--border)',borderRadius:6,fontSize:13,outline:'none'}}/>
+                        <span style={{fontSize:13,fontWeight:600}}>₹{amount.toLocaleString('en-IN')}</span>
+                        <button type="button" onClick={()=>removeLineItem(idx)} disabled={form.line_items.length===1} style={{padding:'4px 8px',borderRadius:4,border:'1px solid #fca5a5',background:'var(--red-bg)',color:'var(--red)',cursor:form.line_items.length===1?'not-allowed':'pointer',opacity:form.line_items.length===1?0.5:1}}>×</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Payment & Totals */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:16}}>
+                <div>
+                  <label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:5,textTransform:'uppercase'}}>Discount (₹)</label>
+                  <input name="discount" type="number" value={form.discount} onChange={h} min="0" style={{width:'100%',padding:'9px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:13.5,outline:'none',fontFamily:'inherit'}}/>
+                </div>
                 <div>
                   <label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:5,textTransform:'uppercase'}}>Payment Mode</label>
                   <select name="payment_mode" value={form.payment_mode} onChange={h} style={{width:'100%',padding:'9px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:13.5,outline:'none',fontFamily:'inherit'}}>
                     <option value="cash">Cash</option><option value="upi">UPI</option><option value="card">Card</option><option value="online">Online</option>
                   </select>
                 </div>
+                <div>
+                  <label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:5,textTransform:'uppercase'}}>Payment Status</label>
+                  <select name="payment_status" value={form.payment_status} onChange={h} style={{width:'100%',padding:'9px 12px',border:'1.5px solid var(--border)',borderRadius:8,fontSize:13.5,outline:'none',fontFamily:'inherit'}}>
+                    <option value="pending">Pending</option><option value="paid">Paid</option><option value="partial">Partial</option>
+                  </select>
+                </div>
               </div>
+
+              {/* Totals Summary */}
               <div style={{background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:10,padding:16,marginBottom:16}}>
-                {[['Subtotal',`₹${sub.toLocaleString('en-IN')}`],['GST (12%)',`₹${gst.toLocaleString('en-IN')}`]].map(([l,v])=>(
-                  <div key={l} style={{display:'flex',justifyContent:'space-between',fontSize:13.5,padding:'4px 0',color:'var(--muted)'}}><span>{l}</span><span>{v}</span></div>
-                ))}
-                <div style={{display:'flex',justifyContent:'space-between',fontSize:16,fontWeight:700,padding:'10px 0 0',borderTop:'2px solid var(--text)',marginTop:6}}><span>Total</span><span style={{color:'var(--accent)'}}>₹{total.toLocaleString('en-IN')}</span></div>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:13.5,padding:'4px 0',color:'var(--muted)'}}>
+                  <span>Subtotal</span><span>₹{subtotal.toLocaleString('en-IN')}</span>
+                </div>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:13.5,padding:'4px 0',color:'var(--muted)'}}>
+                  <span>Discount</span><span>-₹{discount.toLocaleString('en-IN')}</span>
+                </div>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:13.5,padding:'4px 0',color:'var(--muted)'}}>
+                  <span>GST ({form.gst_rate||12}%)</span><span>₹{gst.toLocaleString('en-IN')}</span>
+                </div>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:16,fontWeight:700,padding:'10px 0 0',borderTop:'2px solid var(--text)',marginTop:6}}>
+                  <span>Total</span><span style={{color:'var(--accent)'}}>₹{total.toLocaleString('en-IN')}</span>
+                </div>
               </div>
+
               <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
                 <button type="button" onClick={()=>setShowModal(false)} style={{padding:'9px 18px',borderRadius:8,border:'1.5px solid var(--border)',background:'transparent',cursor:'pointer',fontFamily:'inherit'}}>Cancel</button>
                 <button type="submit" style={{padding:'9px 20px',borderRadius:8,border:'none',background:'var(--accent)',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Save Invoice</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* View Invoice Modal */}
+      {viewInvoice && (
+        <div onClick={()=>setViewInvoice(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.4)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:'var(--surface)',borderRadius:16,padding:28,width:'100%',maxWidth:600,maxHeight:'85vh',overflowY:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+              <div>
+                <h3 style={{fontFamily:'Syne,sans-serif',fontWeight:800,fontSize:20}}>Invoice #{viewInvoice.invoice_number}</h3>
+                <p style={{fontSize:13,color:'var(--muted)',margin:0}}>{new Date(viewInvoice.created_at).toLocaleDateString('en-IN')}</p>
+              </div>
+              <button onClick={()=>setViewInvoice(null)} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:'var(--muted)'}}>×</button>
+            </div>
+            
+            <div style={{marginBottom:16}}>
+              <p style={{margin:'4px 0',fontSize:14}}><strong>Guest:</strong> {viewInvoice.guests?.full_name}</p>
+              <p style={{margin:'4px 0',fontSize:14}}><strong>Status:</strong> <Badge variant={viewInvoice.payment_status==='paid'?'success':'warning'}>{viewInvoice.payment_status}</Badge></p>
+              <p style={{margin:'4px 0',fontSize:14}}><strong>Payment Mode:</strong> {viewInvoice.payment_mode}</p>
+            </div>
+
+            <div style={{border:'1px solid var(--border)',borderRadius:8,marginBottom:16,overflow:'hidden'}}>
+              <div style={{display:'grid',gridTemplateColumns:'3fr 80px 100px 100px',gap:8,padding:'10px 12px',background:'var(--surface2)',fontSize:11,fontWeight:600,color:'var(--muted)',textTransform:'uppercase'}}>
+                <span>Description</span><span>Qty</span><span>Rate</span><span>Amount</span>
+              </div>
+              {viewInvoice.invoice_line_items?.length>0 ? viewInvoice.invoice_line_items.map((item,idx)=>{
+                const amount = (parseFloat(item.quantity)||0)*(parseFloat(item.rate)||0);
+                return (
+                  <div key={idx} style={{display:'grid',gridTemplateColumns:'3fr 80px 100px 100px',gap:8,padding:'10px 12px',borderTop:idx>0?'1px solid var(--border)':'none',fontSize:13}}>
+                    <span>{item.description}</span><span>{item.quantity}</span><span>₹{item.rate}</span><span>₹{amount.toLocaleString('en-IN')}</span>
+                  </div>
+                );
+              }) : (
+                <div style={{padding:'20px',textAlign:'center',color:'var(--muted)',fontSize:13}}>No line items</div>
+              )}
+            </div>
+
+            <div style={{background:'var(--surface2)',borderRadius:8,padding:16}}>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:14,padding:'4px 0'}}><span>Subtotal</span><span>₹{parseFloat(viewInvoice.subtotal).toLocaleString('en-IN')}</span></div>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:14,padding:'4px 0',color:'var(--muted)'}}><span>Discount</span><span>-₹{parseFloat(viewInvoice.discount).toLocaleString('en-IN')}</span></div>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:14,padding:'4px 0',color:'var(--muted)'}}><span>GST ({viewInvoice.gst_rate}%)</span><span>₹{parseFloat(viewInvoice.gst_amount).toLocaleString('en-IN')}</span></div>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:18,fontWeight:700,padding:'10px 0 0',borderTop:'2px solid var(--text)',marginTop:8}}>
+                <span>Total</span><span style={{color:'var(--accent)'}}>₹{parseFloat(viewInvoice.total).toLocaleString('en-IN')}</span>
+              </div>
+            </div>
           </div>
         </div>
       )}

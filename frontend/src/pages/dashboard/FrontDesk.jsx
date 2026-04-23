@@ -20,7 +20,7 @@ export default function FrontDesk() {
     full_name: '', phone: '', email: '', id_type: 'aadhaar', id_number: '',
     checkin_date: new Date().toISOString().split('T')[0],
     checkout_date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-    num_guests: 1, meal_plan: 'EP', source: 'walk-in', room_rate: '', special_requests: '', extra_mattress: 0, referral_name: ''
+    adults: 1, children: 0, meal_plan: 'EP', source: 'walk-in', room_rate: '', special_requests: '', extra_mattress: 0, referral_name: ''
   });
   const [availableRooms, setAvailableRooms] = useState([]);
   const [checkingAvail, setCheckingAvail] = useState(false);
@@ -65,7 +65,7 @@ export default function FrontDesk() {
       await api.post('/hms/bookings', {
         guest_id: gData.guest.id, room_id: selectedRoom,
         checkin_date: form.checkin_date, checkout_date: form.checkout_date,
-        num_guests: parseInt(form.num_guests), meal_plan: form.meal_plan,
+        num_guests: parseInt(form.adults) + parseInt(form.children), meal_plan: form.meal_plan,
         room_rate: parseFloat(form.room_rate) || 0, source: form.source,
         special_requests: form.special_requests, extra_mattress: parseInt(form.extra_mattress) || 0,
         referral_name: form.source === 'referral' ? form.referral_name : null
@@ -152,7 +152,20 @@ export default function FrontDesk() {
             <Input label="Check-out Date *" name="checkout_date" type="date" value={form.checkout_date} onChange={handle} required />
           </FormRow>
           <FormRow>
-            <Input label="No. of Guests" name="num_guests" type="number" value={form.num_guests} onChange={handle} />
+            <Select label="Total Adults *" name="adults" value={form.adults} onChange={handle} required>
+              <option value="1">1 Adult</option>
+              <option value="2">2 Adults</option>
+              <option value="3">3 Adults</option>
+              <option value="4">4 Adults</option>
+            </Select>
+            <Select label="Children (Max 3)" name="children" value={form.children} onChange={handle}>
+              <option value="0">0 Children</option>
+              <option value="1">1 Child</option>
+              <option value="2">2 Children</option>
+              <option value="3">3 Children</option>
+            </Select>
+          </FormRow>
+          <FormRow>
             <Select label="Meal Plan" name="meal_plan" value={form.meal_plan} onChange={handle}>
               <option value="EP">EP (Room Only)</option>
               <option value="CP">CP (+ Breakfast)</option>
@@ -186,8 +199,8 @@ export default function FrontDesk() {
             </FormRow>
           )}
 
-          {/* Show extra mattress option only for odd guests >= 3 */}
-          {parseInt(form.num_guests) >= 3 && parseInt(form.num_guests) % 2 === 1 && (
+          {/* Show extra mattress option only for even total guests >= 2 */}
+          {(parseInt(form.adults) + parseInt(form.children)) >= 2 && (parseInt(form.adults) + parseInt(form.children)) % 2 === 0 && (
             <FormRow>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'var(--surface2)', borderRadius: 8, border: '1.5px solid var(--border)' }}>
                 <input 
@@ -199,7 +212,7 @@ export default function FrontDesk() {
                   style={{ width: 18, height: 18, cursor: 'pointer' }}
                 />
                 <label htmlFor="extra_mattress" style={{ fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
-                  Extra Mattress (for {form.num_guests} guests - odd number)
+                  Extra Mattress (for {parseInt(form.adults) + parseInt(form.children)} guests - even number)
                 </label>
               </div>
             </FormRow>

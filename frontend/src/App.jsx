@@ -11,6 +11,7 @@ import DashboardLayout from './pages/DashboardLayout';
 import DashboardHome from './pages/dashboard/DashboardHome';
 import FrontDesk from './pages/dashboard/FrontDesk';
 import Bookings from './pages/dashboard/Bookings';
+import { NewBooking } from './pages/dashboard/NewBooking';
 import Rooms from './pages/dashboard/Rooms';
 import Invoices from './pages/dashboard/Invoices';
 import Inventory from './pages/dashboard/Inventory';
@@ -46,6 +47,7 @@ export default function App() {
             <Route index element={<DashboardHome />} />
             <Route path="front-desk" element={<FrontDesk />} />
             <Route path="bookings" element={<Bookings />} />
+            <Route path="new-booking" element={<NewBooking />} />
             <Route path="rooms" element={<Rooms />} />
             <Route path="invoices" element={<Invoices />} />
             <Route path="inventory" element={<Inventory />} />
