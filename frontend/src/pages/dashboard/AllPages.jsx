@@ -319,7 +319,7 @@ export function Inventory() {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState('monthly');
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({item_name:'',quantity:1,unit:'pcs',rate:0,vendor:'',purchase_date:new Date().toISOString().split('T')[0]});
+  const [form, setForm] = useState({item_name:'',quantity:1,unit:'pcs',rate:'',amount_paid:'',vendor:'',purchase_date:new Date().toISOString().split('T')[0]});
 
   useEffect(()=>{fetchInv();},[mode]);
   const fetchInv = async () => {
@@ -329,11 +329,11 @@ export function Inventory() {
   const h=(e)=>setForm(p=>({...p,[e.target.name]:e.target.value}));
   const addRow=async(e)=>{
     e.preventDefault();
-    try{await api.post('/hms/inventory',{...form,mode});toast.success('Item added');setShowAdd(false);setForm({item_name:'',quantity:1,unit:'pcs',rate:0,vendor:'',purchase_date:new Date().toISOString().split('T')[0]});fetchInv();}
+    try{await api.post('/hms/inventory',{...form,mode});toast.success('Item added');setShowAdd(false);setForm({item_name:'',quantity:1,unit:'pcs',rate:'',amount_paid:'',vendor:'',purchase_date:new Date().toISOString().split('T')[0]});fetchInv();}
     catch(err){toast.error(err.response?.data?.error||'Failed');}
   };
   const del=async(id)=>{await api.delete(`/hms/inventory/${id}`);fetchInv();};
-  const total=rows.reduce((a,r)=>a+parseFloat(r.amount||0),0);
+  const total=rows.reduce((a,r)=>a+parseFloat(r.amount_paid||r.amount||0),0);
 
   if(loading) return <Spinner />;
   return (
@@ -349,7 +349,7 @@ export function Inventory() {
       {showAdd&&(
         <Card style={{marginBottom:16}}>
           <form onSubmit={addRow} style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:12,alignItems:'flex-end'}}>
-            {[['item_name','Item Name','text','Tomatoes',true],['quantity','Quantity','number','10'],['unit','Unit','select'],['rate','Rate (₹)','number','50'],['vendor','Vendor','text','Vendor name'],['purchase_date','Date','date']].map(([n,l,t,ph,req])=>(
+            {[['item_name','Item Name','text','Tomatoes',true],['quantity','Quantity','number','10'],['unit','Unit','select'],['rate','MRP Rate (₹)','number','50'],['amount_paid','Amount Paid (₹)','number','500'],['vendor','Vendor','text','Vendor name'],['purchase_date','Date','date']].map(([n,l,t,ph,req])=>(
               <div key={n}>
                 <label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:4,textTransform:'uppercase'}}>{l}</label>
                 {t==='select'?(
@@ -370,7 +370,7 @@ export function Inventory() {
       )}
       <Card>
         <table style={{width:'100%',borderCollapse:'collapse'}}>
-          <thead><tr>{['#','Item','Qty','Unit','Rate','Amount','Vendor','Date',''].map(h=>(
+          <thead><tr>{['#','Item','Qty','Unit','MRP Rate','Calculated','Amount Paid','Vendor','Date',''].map(h=>(
             <th key={h} style={{fontSize:11,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.8px',padding:'10px 12px',borderBottom:'1px solid var(--border)',textAlign:'left',background:'var(--surface2)'}}>{h}</th>
           ))}</tr></thead>
           <tbody>
@@ -381,13 +381,14 @@ export function Inventory() {
                 <td style={{padding:'10px 12px'}}>{r.quantity}</td>
                 <td style={{padding:'10px 12px',color:'var(--muted)'}}>{r.unit}</td>
                 <td style={{padding:'10px 12px'}}>₹{r.rate}</td>
-                <td style={{padding:'10px 12px',fontWeight:600}}>₹{parseFloat(r.amount).toLocaleString('en-IN')}</td>
+                <td style={{padding:'10px 12px',color:'var(--muted)',fontSize:13}}>₹{parseFloat(r.amount).toLocaleString('en-IN')}</td>
+                <td style={{padding:'10px 12px',fontWeight:600}}>₹{r.amount_paid ? parseFloat(r.amount_paid).toLocaleString('en-IN') : parseFloat(r.amount).toLocaleString('en-IN')}</td>
                 <td style={{padding:'10px 12px',color:'var(--muted)',fontSize:13}}>{r.vendor||'—'}</td>
                 <td style={{padding:'10px 12px',fontSize:13}}>{r.purchase_date}</td>
                 <td style={{padding:'10px 12px'}}><button onClick={()=>del(r.id)} style={{fontSize:12,padding:'3px 8px',borderRadius:5,border:'1px solid #fca5a5',background:'var(--red-bg)',color:'var(--red)',cursor:'pointer',fontFamily:'inherit'}}>×</button></td>
               </tr>
             ))}
-            {rows.length===0&&<tr><td colSpan={9} style={{textAlign:'center',padding:40,color:'var(--muted)'}}>No inventory items yet</td></tr>}
+            {rows.length===0&&<tr><td colSpan={10} style={{textAlign:'center',padding:40,color:'var(--muted)'}}>No inventory items yet</td></tr>}
           </tbody>
         </table>
         <div style={{display:'flex',justifyContent:'flex-end',marginTop:16,paddingTop:16,borderTop:'1px solid var(--border)'}}>

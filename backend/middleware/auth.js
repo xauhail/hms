@@ -1,8 +1,8 @@
 const jwt = require('jsonwebtoken');
 const { createClient } = require('@supabase/supabase-js');
-const supabase = require('../services/supabase');
+const { supabaseAdmin } = require('../services/supabaseAdmin');
 
-// Separate auth client so getUser() never taints the shared DB client
+// Separate auth client so getUser() never taints the DB admin client
 const authClient = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -18,14 +18,14 @@ const authenticate = async (req, res, next) => {
 
     const token = authHeader.split(' ')[1];
 
-    // Verify Supabase JWT (isolated client so shared DB client isn't tainted)
+    // Verify Supabase JWT (isolated client - never used for DB)
     const { data: { user }, error } = await authClient.auth.getUser(token);
     if (error || !user) {
       return res.status(401).json({ error: 'Invalid or expired token' });
     }
 
-    // Get user profile with org
-    const { data: profile, error: profileError } = await supabase
+    // Get user profile with org using admin client (bypasses RLS)
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from('user_profiles')
       .select('*, organizations(*)')
       .eq('id', user.id)

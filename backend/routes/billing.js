@@ -2,8 +2,11 @@ const express = require('express');
 const router = express.Router();
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
-const supabase = require('../services/supabase');
+const { supabaseAdmin } = require('../services/supabaseAdmin');
 const { authenticate, requireAdmin } = require('../middleware/auth');
+
+// Use admin client that bypasses RLS for all DB operations
+const supabase = supabaseAdmin;
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,

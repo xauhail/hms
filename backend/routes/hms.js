@@ -1,7 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const supabase = require('../services/supabase');
+const { supabaseAdmin } = require('../services/supabaseAdmin');
 const { authenticate, requireAdmin, requireActiveSubscription } = require('../middleware/auth');
+
+// Use admin client that bypasses RLS for all DB operations
+const supabase = supabaseAdmin;
 
 // Apply auth + subscription check to all HMS routes
 router.use(authenticate, requireActiveSubscription);
@@ -217,10 +220,15 @@ router.get('/bookings', async (req, res) => {
 
 router.post('/bookings', async (req, res) => {
   try {
-    const { guest_id, room_id, checkin_date, checkout_date, num_guests, meal_plan, room_rate, source, special_requests } = req.body;
+    const { guest_id, room_id, checkin_date, checkout_date, num_guests, meal_plan, room_rate, source, special_requests, extra_mattress, referral_name } = req.body;
 
     if (!guest_id || !room_id || !checkin_date || !checkout_date) {
       return res.status(400).json({ error: 'guest_id, room_id, checkin_date, checkout_date are required' });
+    }
+    
+    // Validate referral_name if source is referral
+    if (source === 'referral' && !referral_name) {
+      return res.status(400).json({ error: 'Referral name is required when source is referral' });
     }
 
     if (new Date(checkout_date) <= new Date(checkin_date)) {
@@ -241,6 +249,7 @@ router.post('/bookings', async (req, res) => {
         org_id: req.orgId, guest_id, room_id, checkin_date, checkout_date,
         num_guests: num_guests || 1, meal_plan: meal_plan || 'EP',
         room_rate: room_rate || 0, source: source || 'walk-in',
+        extra_mattress: extra_mattress || 0, referral_name: referral_name || null,
         special_requests, status: 'confirmed', created_by: req.user.id
       })
       .select('*, guests(full_name, phone), rooms(room_number)')
@@ -348,11 +357,12 @@ router.get('/inventory', async (req, res) => {
 
 router.post('/inventory', async (req, res) => {
   try {
-    const { item_name, quantity, unit, rate, purchase_date, vendor, mode } = req.body;
+    const { item_name, quantity, unit, rate, amount_paid, purchase_date, vendor, mode } = req.body;
     if (!item_name || !quantity || !rate) return res.status(400).json({ error: 'item_name, quantity, rate required' });
 
+    const amountPaidVal = amount_paid === '' ? null : amount_paid;
     const { data, error } = await supabase.from('inventory_purchases')
-      .insert({ org_id: req.orgId, item_name, quantity, unit: unit || 'pcs', rate, purchase_date: purchase_date || new Date().toISOString().split('T')[0], vendor, mode: mode || 'monthly', created_by: req.user.id })
+      .insert({ org_id: req.orgId, item_name, quantity, unit: unit || 'pcs', rate, amount_paid: amountPaidVal, purchase_date: purchase_date || new Date().toISOString().split('T')[0], vendor, mode: mode || 'monthly', created_by: req.user.id })
       .select().single();
 
     if (error) return res.status(500).json({ error: error.message });

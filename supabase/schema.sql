@@ -131,6 +131,8 @@ CREATE TABLE bookings (
   meal_plan VARCHAR(10) DEFAULT 'EP', -- EP | CP | MAP | AP
   room_rate DECIMAL(10,2) DEFAULT 0,
   status VARCHAR(50) DEFAULT 'confirmed', -- confirmed | checked-in | checked-out | cancelled | no-show
+  extra_mattress INTEGER DEFAULT 0, -- Number of extra mattresses (for odd guests >= 3)
+  referral_name VARCHAR(255), -- Name of referrer when source is 'referral'
   special_requests TEXT,
   created_by UUID REFERENCES auth.users(id),
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -183,8 +185,9 @@ CREATE TABLE inventory_purchases (
   item_name VARCHAR(255),
   quantity DECIMAL(10,2) NOT NULL,
   unit VARCHAR(50) DEFAULT 'pcs',
-  rate DECIMAL(10,2) NOT NULL,
-  amount DECIMAL(10,2) GENERATED ALWAYS AS (quantity * rate) STORED,
+  rate DECIMAL(10,2) NOT NULL, -- MRP Rate per unit
+  amount DECIMAL(10,2) GENERATED ALWAYS AS (quantity * rate) STORED, -- Calculated amount
+  amount_paid DECIMAL(10,2), -- Actual amount paid (can differ from calculated due to discounts)
   purchase_date DATE DEFAULT CURRENT_DATE,
   vendor VARCHAR(255),
   mode VARCHAR(20) DEFAULT 'monthly', -- weekly | monthly

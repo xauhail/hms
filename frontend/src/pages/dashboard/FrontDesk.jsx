@@ -20,7 +20,7 @@ export default function FrontDesk() {
     full_name: '', phone: '', email: '', id_type: 'aadhaar', id_number: '',
     checkin_date: new Date().toISOString().split('T')[0],
     checkout_date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-    num_guests: 1, meal_plan: 'EP', source: 'walk-in', room_rate: '', special_requests: ''
+    num_guests: 1, meal_plan: 'EP', source: 'walk-in', room_rate: '', special_requests: '', extra_mattress: 0, referral_name: ''
   });
   const [availableRooms, setAvailableRooms] = useState([]);
   const [checkingAvail, setCheckingAvail] = useState(false);
@@ -67,7 +67,8 @@ export default function FrontDesk() {
         checkin_date: form.checkin_date, checkout_date: form.checkout_date,
         num_guests: parseInt(form.num_guests), meal_plan: form.meal_plan,
         room_rate: parseFloat(form.room_rate) || 0, source: form.source,
-        special_requests: form.special_requests
+        special_requests: form.special_requests, extra_mattress: parseInt(form.extra_mattress) || 0,
+        referral_name: form.source === 'referral' ? form.referral_name : null
       });
       // Update booking to checked-in
       toast.success('Guest checked in successfully!');
@@ -170,6 +171,39 @@ export default function FrontDesk() {
             </Select>
             <Input label="Room Rate (₹/night)" name="room_rate" type="number" value={form.room_rate} onChange={handle} placeholder="2500" />
           </FormRow>
+
+          {/* Show referral name input when source is referral */}
+          {form.source === 'referral' && (
+            <FormRow>
+              <Input 
+                label="Referral Name *" 
+                name="referral_name" 
+                value={form.referral_name} 
+                onChange={handle} 
+                placeholder="Who referred this guest?" 
+                required 
+              />
+            </FormRow>
+          )}
+
+          {/* Show extra mattress option only for odd guests >= 3 */}
+          {parseInt(form.num_guests) >= 3 && parseInt(form.num_guests) % 2 === 1 && (
+            <FormRow>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'var(--surface2)', borderRadius: 8, border: '1.5px solid var(--border)' }}>
+                <input 
+                  type="checkbox" 
+                  id="extra_mattress" 
+                  name="extra_mattress" 
+                  checked={form.extra_mattress > 0} 
+                  onChange={(e) => setForm(p => ({ ...p, extra_mattress: e.target.checked ? 1 : 0 }))}
+                  style={{ width: 18, height: 18, cursor: 'pointer' }}
+                />
+                <label htmlFor="extra_mattress" style={{ fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                  Extra Mattress (for {form.num_guests} guests - odd number)
+                </label>
+              </div>
+            </FormRow>
+          )}
 
           <div style={{ height: 1, background: 'var(--border)', margin: '16px 0' }} />
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 12 }}>
