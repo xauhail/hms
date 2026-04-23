@@ -3,6 +3,7 @@ const router = express.Router();
 const { createClient } = require('@supabase/supabase-js');
 const { supabaseAdmin } = require('../services/supabaseAdmin');
 const { authenticate } = require('../middleware/auth');
+const { register, login } = require('../middleware/validate');
 
 // Separate auth client for auth operations (never used for DB)
 const authClient = createClient(
@@ -12,16 +13,9 @@ const authClient = createClient(
 );
 
 // POST /api/auth/register
-router.post('/register', async (req, res) => {
+router.post('/register', register, async (req, res) => {
   try {
     const { email, password, full_name, hotel_name } = req.body;
-
-    if (!email || !password || !full_name || !hotel_name) {
-      return res.status(400).json({ error: 'All fields are required' });
-    }
-    if (password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    }
 
     // Create Supabase auth user (using isolated auth client)
     const { data: authData, error: authError } = await authClient.auth.admin.createUser({
@@ -90,12 +84,9 @@ router.post('/register', async (req, res) => {
 });
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', login, async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
-    }
 
     // Use isolated auth client for sign in
     const { data, error } = await authClient.auth.signInWithPassword({ email, password });
